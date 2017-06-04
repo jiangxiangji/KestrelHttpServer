@@ -589,6 +589,29 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Tests
             }
         }
 
+        [Fact]
+        public async Task DoesNotEnforceRequestBodyTimeoutOnUpgradeRequests()
+        {
+            using (var input = new TestInput())
+            {
+                var mockTimeoutControl = new Mock<ITimeoutControl>();
+                input.FrameContext.TimeoutControl = mockTimeoutControl.Object;
+
+                var body = MessageBody.For(HttpVersion.Http11, new FrameRequestHeaders { HeaderConnection = "upgrade" }, input.Frame);
+                var bodyTask = body.StartAsync();
+
+                // Add some input and consume it to ensure StartAsync is in the loop
+                input.Add("a");
+                Assert.Equal(1, await body.ReadAsync(new ArraySegment<byte>(new byte[1])));
+
+                input.Fin();
+                await bodyTask;
+
+                mockTimeoutControl.Verify(timeoutControl => timeoutControl.StartTimingReads(), Times.Never);
+                mockTimeoutControl.Verify(timeoutControl => timeoutControl.StopTimingReads(), Times.Never);
+            }
+        }
+
         private void AssertASCII(string expected, ArraySegment<byte> actual)
         {
             var encoding = Encoding.ASCII;
